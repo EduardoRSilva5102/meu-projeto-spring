@@ -1,0 +1,65 @@
+name: CI/CD - Loja Spring
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Testes e build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Testar e empacotar
+        run: bash ./mvnw --batch-mode --no-transfer-progress verify
+      - name: Validar scripts de deploy
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+      - name: Validar build Docker
+        run: docker build --tag loja:ci .
+      - name: Guardar resultados dos testes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-testes
+          path: target/surefire-reports/
+          if-no-files-found: warn
+      - name: Guardar JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: loja-jar
+          path: target/loja-*.jar
+
+  cd:
+    name: Publicar no Render
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: ${{ vars.APP_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Publicar commit validado e verificar aplicação
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: python3 scripts/deploy_render.py

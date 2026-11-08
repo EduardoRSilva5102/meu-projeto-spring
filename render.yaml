@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: meu-projeto-spring
+    runtime: docker
+    plan: free
+    branch: main
+    autoDeployTrigger: 'off'
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: PORT
+        value: '10000'
